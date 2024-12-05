@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datos y Gráficos en Tiempo Real - ThingSpeak</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+        }
+        header {
+            background-color: #4CAF50;
+            padding: 20px;
+            color: white;
+            text-align: center;
+        }
+        .container {
+            width: 90%;
+            margin: 20px auto;
+        }
+        .sensor-data {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        .sensor-box {
+            padding: 10px;
+            background-color: #ffffff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            width: 22%;
+            text-align: center;
+        }
+        .sensor-box h3 {
+            margin: 0;
+            font-size: 24px;
+            color: #4CAF50;
+        }
+        .chart-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        canvas {
+            width: 23%;
+            height: 250px;
+            background-color: #ffffff;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 768px) {
+            .sensor-box {
+                width: 48%;
+            }
+            canvas {
+                width: 48%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Monitoreo en Tiempo Real de Sensores</h1>
+    </header>
+
+    <div class="container">
+        <div class="sensor-data">
+            <div class="sensor-box" id="co">
+                <h3>CO (µg/m³)</h3>
+                <p id="co-value">Cargando...</p>
+            </div>
+            <div class="sensor-box" id="pm10">
+                <h3>PM10 (µg/m³)</h3>
+                <p id="pm10-value">Cargando...</p>
+            </div>
+            <div class="sensor-box" id="pm25">
+                <h3>PM2.5 (µg/m³)</h3>
+                <p id="pm25-value">Cargando...</p>
+            </div>
+            <div class="sensor-box" id="noise">
+                <h3>Ruido (dB)</h3>
+                <p id="noise-value">Cargando...</p>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="coChart"></canvas>
+            <canvas id="pm10Chart"></canvas>
+            <canvas id="pm25Chart"></canvas>
+            <canvas id="noiseChart"></canvas>
+        </div>
+
+        <!-- Gráfico de barras -->
+        <div class="chart-container">
+            <canvas id="barChart"></canvas>
+        </div>
+
+        <!-- Botones para descargar imágenes y CSV -->
+        <div style="text-align: center;">
+            <button id="downloadImage">Descargar Imágenes</button>
+            <button id="downloadCSV">Descargar CSV</button>
+        </div>
+    </div>
+
+    <script>
+        const apiKey = '6SDZPMBY83VQYCVX'; 
+        const channelId = '2775395'; 
+        const url = `https://api.thingspeak.com/channels/${channelId}/feeds.json?api_key=${apiKey}&results=1`;
+
+        let coData = [];
+        let pm10Data = [];
+        let pm25Data = [];
+        let noiseData = [];
+        let labels = [];
+
+        function getData() {
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    const feeds = data.feeds;
+                    if (feeds && feeds.length > 0) {
+                        const latestFeed = feeds[0];
+
+                        const co = parseFloat(latestFeed.field1);
+                        const pm10 = parseFloat(latestFeed.field2);
+                        const pm25 = parseFloat(latestFeed.field3);
+                        const noise = parseFloat(latestFeed.field4);
+
+                        document.getElementById('co-value').textContent = co.toFixed(2); // Muestra el CO en µg/m³
+                        document.getElementById('pm10-value').textContent = pm10.toFixed(2);
+                        document.getElementById('pm25-value').textContent = pm25.toFixed(2);
+                        document.getElementById('noise-value').textContent = noise.toFixed(2);
+
+                        coData.push(co);
+                        pm10Data.push(pm10);
+                        pm25Data.push(pm25);
+                        noiseData.push(noise);
+
+                        if (coData.length > 10) {
+                            coData.shift();
+                            pm10Data.shift();
+                            pm25Data.shift();
+                            noiseData.shift();
+                            labels.shift();
+                        }
+
+                        const currentTime = new Date().toLocaleTimeString();
+                        labels.push(currentTime);
+
+                        updateCharts(co, pm10, pm25, noise);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error al obtener los datos:', error);
+                });
+        }
+
+        var ctxCO = document.getElementById('coChart').getContext('2d');
+        var ctxPM10 = document.getElementById('pm10Chart').getContext('2d');
+        var ctxPM25 = document.getElementById('pm25Chart').getContext('2d');
+        var ctxNoise = document.getElementById('noiseChart').getContext('2d');
+
+        var coChart = new Chart(ctxCO, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'CO (µg/m³)',
+                    data: coData,
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: { responsive: true, scales: { y: { beginAtZero: true } } }
+        });
+
+        var pm10Chart = new Chart(ctxPM10, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'PM10 (µg/m³)',
+                    data: pm10Data,
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: { responsive: true, scales: { y: { beginAtZero: true } } }
+        });
+
+        var pm25Chart = new Chart(ctxPM25, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'PM2.5 (µg/m³)',
+                    data: pm25Data,
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: { responsive: true, scales: { y: { beginAtZero: true } } }
+        });
+
+        var noiseChart = new Chart(ctxNoise, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Ruido (dB)',
+                    data: noiseData,
+                    borderColor: 'rgba(153, 102, 255, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: { responsive: true, scales: { y: { beginAtZero: true } } }
+        });
+
+        // Crear gráfico de barras
+        var ctxBar = document.getElementById('barChart').getContext('2d');
+        var barChart = new Chart(ctxBar, {
+            type: 'bar',
+            data: {
+                labels: ['CO', 'PM10', 'PM2.5', 'Ruido'],
+                datasets: [{
+                    label: 'Concentración de contaminantes',
+                    data: [0, 0, 0, 0],  // Valores iniciales
+                    backgroundColor: ['rgba(255, 99, 132, 0.5)', 'rgba(54, 162, 235, 0.5)', 'rgba(75, 192, 192, 0.5)', 'rgba(153, 102, 255, 0.5)'],
+                    borderColor: ['rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(75, 192, 192, 1)', 'rgba(153, 102, 255, 1)'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+
+        function updateCharts(co, pm10, pm25, noise) {
+            coChart.data.labels = labels;
+            coChart.data.datasets[0].data = coData;
+            coChart.update();
+
+            pm10Chart.data.labels = labels;
+            pm10Chart.data.datasets[0].data = pm10Data;
+            pm10Chart.update();
+
+            pm25Chart.data.labels = labels;
+            pm25Chart.data.datasets[0].data = pm25Data;
+            pm25Chart.update();
+
+            noiseChart.data.labels = labels;
+            noiseChart.data.datasets[0].data = noiseData;
+            noiseChart.update();
+
+            // Actualizar gráfico de barras
+            barChart.data.datasets[0].data = [co, pm10, pm25, noise];
+            barChart.update();
+        }
+
+        // Funciones para descargar los gráficos como imágenes
+        document.getElementById('downloadImage').addEventListener('click', function() {
+            const charts = [coChart, pm10Chart, pm25Chart, noiseChart];
+            charts.forEach((chart, index) => {
+                const url = chart.toBase64Image();
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `grafico_${index + 1}.png`;
+                a.click();
+            });
+        });
+
+        // Función para descargar CSV
+        document.getElementById('downloadCSV').addEventListener('click', function() {
+            const rows = [
+                ['Hora', 'CO (µg/m³)', 'PM10 (µg/m³)', 'PM2.5 (µg/m³)', 'Ruido (dB)'],
+                ...labels.map((label, index) => [
+                    label,
+                    coData[index] || '',
+                    pm10Data[index] || '',
+                    pm25Data[index] || '',
+                    noiseData[index] || ''
+                ])
+            ];
+
+            let csvContent = 'data:text/csv;charset=utf-8,';
+            rows.forEach(row => {
+                csvContent += row.join(',') + '\n';
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const a = document.createElement('a');
+            a.href = encodedUri;
+            a.download = 'data.csv';
+            a.click();
+        });
+
+        // Actualiza los datos cada 30 segundos
+        setInterval(getData, 30000); // Actualiza los datos cada 30 segundos
+    </script>
+</body>
+</html>
